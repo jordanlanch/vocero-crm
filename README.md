@@ -149,6 +149,7 @@ Mientras se publica la imagen 2.0.0 de Nea, el servicio va detrás del perfil
 | `POST /api/bot/reset` | Reiniciar una conversación de pruebas |
 | `GET /api/bot/availability` | Con la agenda encendida: los horarios para ofrecer, que quedan registrados como ofrecidos. Con `date=AAAA-MM-DD`, todas las horas libres de ese día; `query` dice hasta dónde llega lo consultado |
 | `POST` · `PATCH /api/bot/bookings` | Con la agenda encendida: reservar (201) o mover (200) una cita, solo en un horario que se ofreció |
+| `POST /api/bot/contacts` | Dar de alta un prospecto que nunca ha escrito por WhatsApp (un lead de tu web, por ejemplo): crea el contacto y su lead. Idempotente por teléfono —`201` lo creó esa llamada, `200` ya existía y devuelve el mismo— para que tu backend pueda reintentar sin miedo. Solo acepta un teléfono con código de país; la identidad la deriva el CRM de ahí |
 
 El contrato completo, con el despacho y el aviso de olvido, está en
 [`docs/openapi.json`](docs/openapi.json) (OpenAPI 3.1) y tu instancia lo sirve

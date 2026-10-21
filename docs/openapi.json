@@ -174,6 +174,36 @@
         }
       }
     },
+    "/api/bot/contacts": {
+      "post": {
+        "summary": "Dar de alta un prospecto que nunca ha escrito por WhatsApp",
+        "description": "La otra mitad del intake: un backend externo que captura un lead en la web abierta lo registra aquí, con la misma `BOT_API_KEY` del resto de `/api/bot/*` y sin que salga ningún secreto de Meta. Crea el contacto Y su lead (si no viene `stageId`, en la primera etapa abierta del tablero), y es idempotente por teléfono. Códigos: `201` creó el contacto en esta llamada, `200` ya existía y se devuelve el mismo (con `created: false`). No es un `409`: quien llama es una máquina que reintenta, y un conflicto la mandaría a escalar un alta que ya está hecha. Si el lead ya existía (el prospecto había hablado antes) se devuelve ese, no uno nuevo. Solo acepta un teléfono de WhatsApp en dígitos con código de país: la identidad la deriva el CRM de ahí, nunca de lo que mande el cuerpo.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["phone", "name"],
+                "properties": {
+                  "phone": { "type": "string", "description": "Teléfono en dígitos, con código de país (ej. 5215512345678). El 521→52 lo normaliza el CRM.", "examples": ["5215512345678"] },
+                  "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+                  "stageId": { "type": "string", "description": "Etapa inicial del lead; si no viene, la primera abierta." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "$ref": "#/components/responses/ContactoCreado" },
+          "200": { "$ref": "#/components/responses/ContactoExistente" },
+          "401": { "description": "`unauthorized`: falta `X-API-Key` o no es la `BOT_API_KEY`.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "`no_org`: la instancia aún no tiene organización.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "422": { "description": "`invalid_body`: el cuerpo no valida (el 422 lleva el detalle del campo). `invalid_phone`: identidad de un tipo que no es un teléfono de WhatsApp. `no_stage`: el tablero no tiene etapas abiertas donde colocar al prospecto.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        },
+        "x-codigos-409": ["no_org"]
+      }
+    },
     "/api/bot/openapi.json": {
       "get": {
         "summary": "Este documento",
@@ -223,12 +253,24 @@
       "NoEncontrada": { "description": "No existe la conversación.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
       "SinOrganizacion": { "description": "`no_org`: la instancia aún no tiene organización.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
       "Invalido": { "description": "Cuerpo o parámetros inválidos.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "ContactoCreado": { "description": "El contacto (y su lead) los creó esta llamada. `created: true` lo dice; si el lead ya existía porque el prospecto había hablado antes, se devuelve ese lead y el contacto sigue siendo nuevo.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Prospecto" } } } },
+      "ContactoExistente": { "description": "Ya estaba: el mismo contacto y el mismo lead, con `created: false`. Repetir el alta es seguro.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Prospecto" } } } },
       "ConflictoDeAgenda": { "description": "`slot_taken` (se ocupó) o `slot_not_offered` (no se le ofreció a esta conversación); trae `slots` frescos para volver a ofrecer.", "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/Error" }, { "type": "object", "properties": { "slots": { "type": "array", "items": { "$ref": "#/components/schemas/Hueco" } } } }] } } } }
     },
     "schemas": {
       "Error": { "type": "object", "required": ["error"], "properties": { "error": { "type": "object", "required": ["code", "message"], "properties": { "code": { "type": "string" }, "message": { "type": "string" } } } } },
       "Ok": { "type": "object", "properties": { "ok": { "type": "boolean" } } },
       "Canal": { "type": "string", "description": "Informativo: la lista crece. No hagas un switch exhaustivo.", "examples": ["whatsapp", "instagram", "messenger", "tiktok"] },
+      "Prospecto": {
+        "type": "object",
+        "description": "Lo que devuelve `POST /api/bot/contacts`: el contacto dado de alta y su lead.",
+        "required": ["created", "contact", "lead"],
+        "properties": {
+          "created": { "type": "boolean", "description": "`true` si esta llamada creó el contacto; `false` si ya existía." },
+          "contact": { "type": "object", "required": ["id", "identity"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "identity": { "type": "string", "description": "Llave estable del contacto (alias de `wa_identity`): es la que se le pasa a `GET /api/bot/context?identity=`." }, "phone": { "type": ["string", "null"] } } },
+          "lead": { "type": "object", "required": ["id", "stageId"], "properties": { "id": { "type": "string" }, "stageId": { "type": "string" } } }
+        }
+      },
       "Contexto": {
         "type": "object",
         "properties": {
